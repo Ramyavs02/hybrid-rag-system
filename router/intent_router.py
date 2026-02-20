@@ -1,0 +1,103 @@
+import re
+import json
+import os
+from openai import OpenAI
+
+# ----------------------------
+# KEYWORD RULES (Deterministic Layer)
+# ----------------------------
+
+ORDER_PATTERN = re.compile(r"\bORD\d+\b", re.IGNORECASE)
+PRODUCT_PATTERN = re.compile(r"\bP\d+\b", re.IGNORECASE)
+
+POLICY_KEYWORDS = [
+    "refund",
+    "return",
+    "warranty",
+    "policy",
+    "compensation",
+    "shipping",
+    "cancellation",
+    "exchange",
+    "privacy",
+    "payment"
+]
+
+# ----------------------------
+# LLM PROMPT (Fallback Only)
+# ----------------------------
+
+INTENT_PROMPT = """
+You are an intent classifier.
+
+Classify the user query into one or more of these intents:
+- orders
+- products
+- policies
+
+Return ONLY a JSON array.
+Example: ["products", "orders"]
+"""
+
+
+def detect_intent(query: str) -> list[str]:
+    intents = set()
+    query_lower = query.lower()
+
+    # ----------------------------
+    # 1️⃣ Deterministic ID Detection
+    # ----------------------------
+
+    if ORDER_PATTERN.search(query):
+        intents.add("orders")
+
+    if PRODUCT_PATTERN.search(query):
+        intents.add("products")
+
+    # ----------------------------
+    # 2️⃣ Keyword-Based Detection
+    # ----------------------------
+
+    if "order" in query_lower:
+        intents.add("orders")
+
+    if "product" in query_lower:
+        intents.add("products")
+
+    if any(keyword in query_lower for keyword in POLICY_KEYWORDS):
+        intents.add("policies")
+
+    # ----------------------------
+    # 3️⃣ If We Found Something → Return
+    # ----------------------------
+
+    if intents:
+        return list(intents)
+
+    # ----------------------------
+    # 4️⃣ Fallback to LLM (Rare Case)
+    # ----------------------------
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is not set")
+
+    client = OpenAI(api_key=api_key)
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",  # cheaper + faster than 3.5
+        messages=[
+            {"role": "system", "content": INTENT_PROMPT},
+            {"role": "user", "content": query}
+        ],
+        temperature=0
+    )
+
+    content = response.choices[0].message.content.strip()
+
+    try:
+        llm_intents = json.loads(content)
+        return llm_intents
+    except json.JSONDecodeError:
+        # Safe fallback
+        return ["policies"]
