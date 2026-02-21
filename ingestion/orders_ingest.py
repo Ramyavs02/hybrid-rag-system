@@ -9,17 +9,20 @@ from qdrant_client.models import VectorParams, Distance
 
 load_dotenv()
 
+# ---------- ENV ----------
 BUCKET = os.getenv("S3_BUCKET")
 REGION = os.getenv("AWS_REGION")
 COLLECTION_NAME = "orders_collection"
 
+# ---------- CLIENTS ----------
 s3 = boto3.client("s3", region_name=REGION)
 
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ✅ QDRANT CLOUD CONNECTION
 qdrant = QdrantClient(
-    host=os.getenv("QDRANT_HOST"),
-    port=int(os.getenv("QDRANT_PORT"))
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY")
 )
 
 # ---------- READ FROM S3 ----------
@@ -37,12 +40,14 @@ def order_to_text(order):
         f"Payment status: {order['payment_status']}."
     )
 
+# ---------- CREATE COLLECTION ----------
 if not qdrant.collection_exists(COLLECTION_NAME):
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
         vectors_config=VectorParams(size=1536, distance=Distance.COSINE)
     )
 
+# ---------- EMBEDDINGS ----------
 points = []
 
 for order in orders:
