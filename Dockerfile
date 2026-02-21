@@ -11,6 +11,7 @@ COPY router/ router/
 COPY retrievers/ retrievers/
 COPY ingestion/ ingestion/
 COPY utils/ utils/
+COPY core/ core/
 
 EXPOSE 8000
 

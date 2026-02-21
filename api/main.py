@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from core.retrieval_manager import run_retrieval
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import time
 from dotenv import load_dotenv
@@ -16,6 +18,13 @@ load_dotenv()
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Temporary for testing
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 class QueryRequest(BaseModel):
     query: str
 
