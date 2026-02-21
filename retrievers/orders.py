@@ -7,11 +7,12 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 from openai import OpenAI
 
 # -----------------------------
-# Clients
+# Clients (CLOUD CONFIG)
 # -----------------------------
 qdrant = QdrantClient(
-    host=os.getenv("QDRANT_HOST"),
-    port=int(os.getenv("QDRANT_PORT"))
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY"),
+    timeout=60
 )
 
 openai = OpenAI(
@@ -44,7 +45,6 @@ def retrieve_orders(query: str, user_id: str = None, limit: int = 3) -> Dict[str
             )
         ]
 
-        # 🔐 Optional: Add user-level security filter
         if user_id:
             must_conditions.append(
                 FieldCondition(
@@ -66,14 +66,13 @@ def retrieve_orders(query: str, user_id: str = None, limit: int = 3) -> Dict[str
 
             return {
                 "retrieval_type": "deterministic",
-                "confidence": 1.0,  # deterministic = full confidence
+                "confidence": 1.0,
                 "max_similarity": 1.0,
                 "results": [
                     {
                         "order_id": order.payload.get("order_id"),
-                        "status": order.payload.get("status"),
-                        "total_amount": order.payload.get("total_amount"),
-                        "created_at": order.payload.get("created_at"),
+                        "order_status": order.payload.get("order_status"),
+                        "payment_status": order.payload.get("payment_status"),
                         "payload": order.payload
                     }
                 ]
@@ -96,7 +95,6 @@ def retrieve_orders(query: str, user_id: str = None, limit: int = 3) -> Dict[str
 
     search_filter = None
 
-    # 🔐 Optional: restrict by user_id if provided
     if user_id:
         search_filter = Filter(
             must=[
@@ -108,7 +106,7 @@ def retrieve_orders(query: str, user_id: str = None, limit: int = 3) -> Dict[str
         )
 
     results = qdrant.search(
-        collection_name="orders",
+        collection_name="orders_collection",
         query_vector=embedding,
         query_filter=search_filter,
         limit=limit,
@@ -130,7 +128,8 @@ def retrieve_orders(query: str, user_id: str = None, limit: int = 3) -> Dict[str
 
         retrieved_results.append({
             "order_id": hit.payload.get("order_id"),
-            "status": hit.payload.get("status"),
+            "order_status": hit.payload.get("order_status"),
+            "payment_status": hit.payload.get("payment_status"),
             "similarity_score": round(hit.score, 4),
             "payload": hit.payload
         })

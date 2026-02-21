@@ -6,10 +6,13 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from openai import OpenAI
 
-
+# -----------------------------
+# Clients (CLOUD CONFIG)
+# -----------------------------
 qdrant = QdrantClient(
-    host=os.getenv("QDRANT_HOST"),
-    port=int(os.getenv("QDRANT_PORT"))
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY"),
+    timeout=60
 )
 
 openai = OpenAI(
@@ -67,24 +70,25 @@ def retrieve_products(query: str, limit: int = 3) -> Dict[str, Any]:
         input=query
     ).data[0].embedding
 
-    results = qdrant.query_points(
+    results = qdrant.search(
         collection_name="products_collection",
-        query=embedding,
+        query_vector=embedding,
         limit=limit,
         with_payload=True
     )
 
-    if not results.points:
+    if not results:
         return {
             "retrieval_type": "semantic",
             "confidence": 0.0,
+            "max_similarity": 0.0,
             "results": []
         }
 
     retrieved_results: List[Dict[str, Any]] = []
     max_similarity = 0.0
 
-    for hit in results.points:
+    for hit in results:
         max_similarity = max(max_similarity, hit.score)
 
         retrieved_results.append({

@@ -6,24 +6,18 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from openai import OpenAI
 
-
-# ===============================
-# Clients
-# ===============================
-
+# -----------------------------
+# Clients (CLOUD CONFIG)
+# -----------------------------
 qdrant = QdrantClient(
-    host=os.getenv("QDRANT_HOST"),
-    port=int(os.getenv("QDRANT_PORT"))
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY"),
+    timeout=60
 )
 
 openai = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
-
-
-# ===============================
-# Constants (MUST BE ABOVE FUNCTION)
-# ===============================
 
 POLICY_PATTERN = re.compile(r"\bPOL\d+\b", re.IGNORECASE)
 
@@ -39,17 +33,13 @@ POLICY_KEYWORDS = [
 ]
 
 
-# ===============================
-# Main Retrieval Function
-# ===============================
-
 def retrieve_policies(query: str, limit: int = 3) -> Dict[str, Any]:
 
     query_lower = query.lower()
 
-    # ----------------------------------------------------------
+    # ==========================================================
     # 1️⃣ Deterministic Policy ID Lookup
-    # ----------------------------------------------------------
+    # ==========================================================
     match = POLICY_PATTERN.search(query)
 
     if match:
@@ -78,9 +68,9 @@ def retrieve_policies(query: str, limit: int = 3) -> Dict[str, Any]:
                 "results": [point.payload for point in results]
             }
 
-    # ----------------------------------------------------------
-    # 2️⃣ Deterministic Keyword Filter
-    # ----------------------------------------------------------
+    # ==========================================================
+    # 2️⃣ Deterministic Keyword Lookup
+    # ==========================================================
     for keyword in POLICY_KEYWORDS:
         if keyword in query_lower:
 
@@ -107,23 +97,23 @@ def retrieve_policies(query: str, limit: int = 3) -> Dict[str, Any]:
                     "results": [point.payload for point in results]
                 }
 
-    # ----------------------------------------------------------
-    # 3️⃣ Semantic Fallback (Qdrant compatible)
-    # ----------------------------------------------------------
+    # ==========================================================
+    # 3️⃣ Semantic Fallback
+    # ==========================================================
 
     embedding = openai.embeddings.create(
         model="text-embedding-3-small",
         input=query
     ).data[0].embedding
 
-    results = qdrant.query_points(
+    results = qdrant.search(
         collection_name="policies_collection",
-        query=embedding,
+        query_vector=embedding,
         limit=limit,
         with_payload=True
     )
 
-    if not results.points:
+    if not results:
         return {
             "retrieval_type": "semantic",
             "confidence": 0.0,
@@ -134,7 +124,7 @@ def retrieve_policies(query: str, limit: int = 3) -> Dict[str, Any]:
     retrieved_results: List[Dict[str, Any]] = []
     max_similarity = 0.0
 
-    for hit in results.points:
+    for hit in results:
         max_similarity = max(max_similarity, hit.score)
 
         retrieved_results.append({
